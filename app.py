@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 import random
 import urllib.parse
-import time # This is the secret to fixing the 429 error
+import time
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Professional SEO Article Factory", layout="wide")
@@ -15,14 +15,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- SESSION STATE FOR LOGIN ---
+# --- SESSION STATE ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
 # --- LOGIN PAGE ---
 def login_page():
     st.title("🔒 SEO Article Factory Access")
-    st.write("Welcome! Please enter your details to access the tool.")
     col1, col2 = st.columns([1, 1])
     with col1:
         st.markdown("### User Login")
@@ -32,15 +31,30 @@ def login_page():
             if email and password:
                 st.session_state['logged_in'] = True
                 st.rerun()
-            else:
-                st.error("Please enter both email and password.")
     with col2:
-        st.markdown("### 📢 Important Note")
-        st.info("""
-        **Free Access Guide:**
-        To keep this tool free, please use your own Google API Key. 
-        [👉 Get Your Free Google API Key Here](https://aistudio.google.com/app/apikey)
-        """)
+        st.info("**Free Access Guide:** Use your own Google API Key to keep this tool free. [Get Key Here](https://aistudio.google.com/app/apikey)")
+
+# --- SMART GENERATOR WITH AUTO-RETRY ---
+def write_section_safe(key, model_name, prompt):
+    genai.configure(api_key=key)
+    model = genai.GenerativeModel(model_name)
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            if "429" in str(e) or "quota" in str(e).lower():
+                if attempt < max_retries - 1:
+                    wait_time = 30 * (attempt + 1) # Wait 30s, then 60s
+                    st.warning(f"⚠️ Google Limit Reached. Retrying automatically in {wait_time} seconds... (Attempt {attempt+1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    return f"QUOTA_ERROR: Google's daily/minute limit is full. Please try a different API Key or wait 1 hour."
+            else:
+                return f"ERROR: {str(e)}"
+    return "ERROR: Unknown failure"
 
 # --- MAIN APP ---
 def main_app():
@@ -49,85 +63,63 @@ def main_app():
         st.rerun()
 
     st.title("🛍️ Amazon Affiliate SEO Article Factory")
-    st.write("Generate matured, simple, and high-ranking product reviews.")
 
     with st.sidebar:
-        st.header("🔑 Your API Credentials")
+        st.header("🔑 API Credentials")
         user_api_key = st.text_input("Paste Your Google API Key", type="password")
-        
-        st.header("📏 Article Length")
         word_count_option = st.selectbox("Select Word Count:", ["1000 Words", "1500 Words", "2000 Words"])
         target_words = int(word_count_option.split()[0])
-
-        st.header("📦 Product Information")
         keyword = st.text_input("Product Name")
         brand = st.text_input("Brand Name")
         extra_info = st.text_area("Main Features")
-
-        st.header("🖼️ Image Settings")
-        image_prompt_input = st.text_area("Describe Image", "Professional product photo")
-
-    # --- CORE LOGIC ---
-    def write_section(key, model_name, prompt):
-        try:
-            genai.configure(api_key=key)
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            return f"QUOTA_ERROR: {str(e)}"
+        image_prompt_input = st.text_area("Describe Image", "Professional product photography")
 
     if st.button("🚀 Generate SEO Article Now"):
         if not user_api_key:
             st.error("Please enter your API Key!")
         else:
-            # 1. IMAGE
-            st.subheader("🖼️ Product Visual")
+            # 1. Image
             clean_img = urllib.parse.quote(image_prompt_input)
             img_url = f"https://image.pollinations.ai/prompt/{clean_img}?width=1024&height=768&nologo=true&seed={random.randint(1,9999)}"
             st.image(img_url, use_container_width=True)
 
-            # 2. CONTENT
+            # 2. Content
             full_content = ""
-            status = st.status(f"Creating your {target_words} word review...")
+            status = st.status(f"Writing your {target_words} word review...")
             steps = 2 if target_words == 1000 else (3 if target_words == 1500 else 4)
             words_per_step = target_words // steps
-
-            # Using Gemini 1.5 Flash - It is the most stable for free keys
-            model_to_use = "gemini-1.5-flash"
 
             for i in range(steps):
                 status.write(f"Writing Phase {i+1} of {steps}...")
                 
-                # THE 429 FIX: Wait 12 seconds between requests to reset the Google limit
+                # Pre-request delay to be extra safe
                 if i > 0:
-                    status.write("⏱️ Waiting 12 seconds (Cool-down to prevent Quota Error)...")
-                    time.sleep(12) 
+                    time.sleep(5) 
 
                 step_prompt = f"""
-                Persona: Helpful Reviewer. Product: {keyword} ({brand}). Length: {words_per_step} words.
+                Persona: Helpful Consumer Expert. Product: {keyword} ({brand}). Length: {words_per_step} words.
+                Phase {i+1} focus: {'Meta/Intro' if i==0 else 'Features/Usage' if i<steps-1 else 'FAQ/Verdict'}
+                
                 RULES: 
-                - Start EVERY paragraph with an H2 or H3 heading using "{keyword}" or LSI terms.
-                - Use SIMPLE language.
-                - Meta Title/Desc in PLAIN TEXT. No HTML.
+                - New H2/H3 Heading before EVERY paragraph using "{keyword}" or LSI terms.
+                - Use SIMPLE language. NO HTML. No Meta tags.
                 - Avoid: delve, unlock, tapestry, unleash.
-                Phase {i+1}: {'Meta/Intro' if i==0 else 'Main features' if i<steps-1 else 'FAQ/Verdict'}
                 Data: {extra_info}
                 """
                 
-                section_text = write_section(user_api_key, model_to_use, step_prompt)
+                section_text = write_section_safe(user_api_key, "gemini-1.5-flash", step_prompt)
                 
                 if "QUOTA_ERROR" in section_text:
-                    st.error("Google's limit is very tight right now. Please wait 1 minute and click generate again.")
+                    st.error(section_text)
                     break
                 else:
                     full_content += section_text + "\n\n"
 
-            if full_content:
+            if "QUOTA_ERROR" not in full_content and full_content:
                 status.update(label="✅ Finished!", state="complete")
                 st.markdown("---")
                 st.markdown(full_content)
-                st.download_button("Download Review", full_content, file_name="review.txt")
+                st.download_button("Download Review", full_content, file_name=f"{keyword}.txt")
 
 # --- APP FLOW ---
 if st.session_state['logged_in']:
