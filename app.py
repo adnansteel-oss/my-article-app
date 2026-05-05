@@ -1,93 +1,103 @@
 import streamlit as st
-from openai import OpenAI
+import google.generativeai as genai
+import random
 
-# App Configuration
-st.set_page_config(page_title="SEO Humanized Article Generator", layout="wide")
+# --- APP CONFIGURATION ---
+st.set_page_config(page_title="Google AI Article Generator", layout="wide")
 
-# --- UI Layout ---
-st.title("✍️ Professional Humanized Article Creator")
-st.markdown("Generates 1500-2000 word articles that pass AI detectors and rank on Google.")
+st.title("🤖 Google AI Humanized Article Creator")
+st.markdown("Uses Gemini 1.5 Pro to create 1000-2000 word SEO articles.")
 
-# Sidebar for API Key and Settings
+# --- SIDEBAR SETTINGS ---
 with st.sidebar:
-    st.header("Settings")
-    api_key = st.text_input("Enter OpenAI API Key", type="password")
-    model_choice = "gpt-4o" # Best for human-like writing
+    st.header("API Settings")
+    google_api_key = st.text_input("Enter Google AI Studio API Key", type="password")
     
-    st.header("Article Parameters")
-    main_keyword = st.text_input("Main Keyword", placeholder="e.g. CHEFMAN AIR FRYER")
-    brand_name = st.text_input("Brand Name", placeholder="e.g. CHEFMAN")
-    country = st.selectbox("Google Search Country", ["United States", "United Kingdom", "Canada"])
+    st.header("Article Details")
+    keyword = st.text_input("Main Keyword", "CHEFMAN AIR FRYER")
+    brand = st.text_input("Brand Name", "CHEFMAN")
+    country = st.selectbox("Target Country", ["United States", "United Kingdom", "Canada"])
     language = st.selectbox("Language", ["English", "Spanish", "French"])
-    extra_data = st.text_area("Supplemental Info (Paste links or extra info here)")
+    
+    st.header("Extra Instructions")
+    extra_info = st.text_area("Paste links or specific features here...")
 
-# Function to generate content in sections to ensure 2000 words
-def generate_long_article(api_key, keyword, brand, extra):
-    client = OpenAI(api_key=api_key)
+# --- ARTICLE GENERATION LOGIC ---
+def generate_article_with_gemini(api_key, kw, br, info):
+    genai.configure(api_key=api_key)
     
-    sections = [
-        "Introduction and Meta Data (Include Meta Title, Description, and an engaging H1)",
-        "In-depth Product Overview and Technology (Focus on TurboFry and Multifunctional aspects)",
-        "Health Benefits and Comparison (Focus on 98% less oil and nutritional cooking)",
-        "Mastering the Appliance: Tips, Tricks, and Recipe Ideas for Crispy Results",
-        "Durability, Design, and Safety Features (Stainless steel, auto-shutoff, cleaning)",
-        "Customer Reviews Summary and FAQ (Answer at least 5 common questions)",
-        "Final Summary and Key Features Bullet Points"
-    ]
-    
-    full_article = ""
-    progress_bar = st.progress(0)
-    
-    for i, section in enumerate(sections):
-        st.write(f"Generating {section}...")
-        prompt = f"""
-        Write a professional, humanized SEO section for an article about {keyword}.
-        Brand Name: {brand}. 
-        Specific Section to write: {section}.
-        Context/Data: {extra}.
-        
-        Rules:
-        1. Use a conversational, helpful, human tone (avoid 'AI-sounding' words like 'delve', 'tapestry', 'testament').
-        2. Use LSI keywords related to {keyword}.
-        3. Make this section very detailed. Write at least 300 words for this section alone.
-        4. Use Bold text for key points.
-        5. Structure with H2 or H3 headers.
-        """
-        
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "system", "content": "You are an expert SEO copywriter who writes 100% human-score content."},
-                      {"role": "user", "content": prompt}],
-            temperature=0.8
-        )
-        full_article += response.choices[0].message.content + "\n\n"
-        progress_bar.progress((i + 1) / len(sections))
-    
-    return full_article
+    # Configuration for Gemini
+    generation_config = {
+        "temperature": 0.9, # Higher temperature for more human-like variety
+        "top_p": 1,
+        "max_output_tokens": 8192, # Allows for very long articles
+    }
 
-def generate_seo_image(api_key, keyword):
-    client = OpenAI(api_key=api_key)
-    response = client.images.generate(
-        model="dall-e-3",
-        prompt=f"Professional high-quality lifestyle photography of {keyword} in a modern kitchen. High resolution, bright lighting, 16:9 aspect ratio.",
-        size="1024x1024"
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-pro",
+        generation_config=generation_config,
     )
-    return response.data[0].url
 
-# --- Execution ---
-if st.button("Generate 2000-Word Article & Image"):
-    if not api_key:
-        st.error("Please enter your OpenAI API Key in the sidebar.")
+    # Detailed Prompt to hit 2000 words and 100% human score
+    prompt = f"""
+    Write a comprehensive, professional, and human-sounding SEO blog post about {kw}.
+    Brand: {br}
+    Target Audience: Home cooks in {country}.
+    Additional Data to Include: {info}
+
+    WORD COUNT REQUIREMENT: Minimum 1500 words, Maximum 2000 words. 
+    You MUST be extremely descriptive.
+
+    STYLE REQUIREMENTS:
+    1. TONE: Helpful, enthusiastic, and conversational. Use "you" and "we". 
+    2. STRUCTURE: 
+       - Meta Title and Meta Description (SEO Optimized).
+       - H1 Headline.
+       - Introduction (Focus on benefits, not just features).
+       - H2: Detailed features breakdown (Capacity, Technology like TurboFry).
+       - H2: Health benefits (The "98% less oil" concept).
+       - H2: Practical Tips for "Crispy Perfection".
+       - H2: Cleaning and Maintenance.
+       - H3: Comparison with traditional frying.
+       - FAQ Section (5 detailed questions).
+       - Key Features Summary (Bulleted list).
+    3. HUMANIZATION: Avoid AI clichés like "In conclusion," "Unleash," "In the fast-paced world," or "Dive into." Write like a real product reviewer who has used the item.
+    4. SEO: Use LSI keywords naturally throughout.
+    """
+
+    response = model.generate_content(prompt)
+    return response.text
+
+# --- IMAGE GENERATION ---
+def get_image(kw):
+    # Using a high-quality free image source that works via URL
+    seed = random.randint(1, 1000)
+    img_url = f"https://pollinations.ai/p/{kw.replace(' ', '_')}_modern_kitchen_appliance_cinematic_lighting?width=1024&height=768&seed={seed}"
+    return img_url
+
+# --- MAIN APP INTERFACE ---
+if st.button("Generate Article & Images Now"):
+    if not google_api_key:
+        st.error("Please enter your Google API Key!")
     else:
-        with st.spinner("Writing article... This takes about 1-2 minutes to ensure high word count."):
-            # Generate Image
-            image_url = generate_seo_image(api_key, main_keyword)
-            st.image(image_url, caption=f"SEO Image for {main_keyword}")
-            
-            # Generate Content
-            final_content = generate_long_article(api_key, main_keyword, brand_name, extra_data)
-            
-            st.markdown("---")
-            st.markdown(final_content)
-            
-            st.download_button("Download Article", final_content, file_name="article.md")
+        try:
+            with st.spinner("Gemini is researching and writing your 2000-word article..."):
+                # 1. Show the Image
+                image_url = get_image(keyword)
+                st.image(image_url, caption=f"Generated Image for {keyword}")
+                
+                # 2. Generate and Display Content
+                article_content = generate_article_with_gemini(google_api_key, keyword, brand, extra_info)
+                
+                st.markdown("---")
+                st.markdown(article_content)
+                
+                # 3. Download Button
+                st.download_button(
+                    label="Download Article as Text",
+                    data=article_content,
+                    file_name=f"{keyword.replace(' ', '_')}.txt",
+                    mime="text/plain"
+                )
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
