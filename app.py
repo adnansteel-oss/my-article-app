@@ -15,7 +15,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- SESSION STATE ---
+# --- SESSION STATE FOR LOGIN ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
@@ -34,33 +34,33 @@ def login_page():
     with col2:
         st.info("**Free Access Guide:** Use your own Google API Key to keep this tool free. [Get Key Here](https://aistudio.google.com/app/apikey)")
 
-# --- DYNAMIC MODEL PICKER (Fixes 404 Error) ---
-def get_working_model(api_key):
+# --- DYNAMIC MODEL FINDER (The 404 Fix) ---
+def find_working_model(api_key):
     try:
         genai.configure(api_key=api_key)
-        # We ask Google exactly what models this key can use
+        # We ask Google to list all models available to your specific key
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
+                # We prioritize 1.5 Flash as it is the most stable for free users
                 if 'gemini-1.5-flash' in m.name:
-                    return m.name # Returns the correct string like 'models/gemini-1.5-flash'
-        return "models/gemini-1.5-flash" # Fallback if list fails
+                    return m.name
+        # Fallback if the specific string isn't found
+        return "models/gemini-1.5-flash"
     except:
         return "models/gemini-1.5-flash"
 
-# --- SMART GENERATOR ---
-def write_section_safe(key, model_name, prompt):
-    genai.configure(api_key=key)
-    model = genai.GenerativeModel(model_name)
+# --- SECURE GENERATOR (The 429 Fix) ---
+def safe_generate(model_instance, prompt):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            response = model.generate_content(prompt)
+            response = model_instance.generate_content(prompt)
             return response.text
         except Exception as e:
             if "429" in str(e) or "quota" in str(e).lower():
-                wait_time = 30 * (attempt + 1)
-                st.warning(f"⚠️ Limit reached. Retrying in {wait_time}s...")
-                time.sleep(wait_time)
+                wait = 35 * (attempt + 1)
+                st.warning(f"⚠️ Google Limit hit. Waiting {wait} seconds...")
+                time.sleep(wait)
             else:
                 return f"ERROR: {str(e)}"
     return "QUOTA_ERROR"
@@ -84,60 +84,68 @@ def main_app():
         st.header("📦 Product Info")
         keyword = st.text_input("Product Name")
         brand = st.text_input("Brand Name")
-        extra_info = st.text_area("Main Features")
+        extra_info = st.text_area("Main Features / Specs")
         
         st.header("🖼️ Image Settings")
         image_prompt_input = st.text_area("Describe Image", "Professional product photography")
 
     if st.button("🚀 Generate SEO Article Now"):
-        if not user_api_key:
-            st.error("Please enter your API Key!")
-        elif not keyword:
-            st.error("Please enter a product name!")
+        if not user_api_key or not keyword:
+            st.error("Please ensure API Key and Product Name are filled!")
         else:
-            # 1. IMAGE
+            # 1. IMAGE GENERATION
+            st.subheader("🖼️ Product Visual")
             clean_img = urllib.parse.quote(image_prompt_input)
             img_url = f"https://image.pollinations.ai/prompt/{clean_img}?width=1024&height=768&nologo=true&seed={random.randint(1,9999)}"
             st.image(img_url, use_container_width=True)
 
-            # 2. FIND CORRECT MODEL
-            working_model = get_working_model(user_api_key)
-            st.info(f"Connected to: {working_model}")
+            # 2. AUTO-DETECT MODEL
+            model_name = find_working_model(user_api_key)
+            st.info(f"System: Connected via {model_name}")
 
-            # 3. CONTENT
+            # 3. CONTENT GENERATION
             full_content = ""
-            status = st.status(f"Writing your {target_words} word review...")
+            status = st.status(f"Writing your {target_words} word expert review...")
+            
+            # Logic: 1000=2 phases, 1500=3 phases, 2000=4 phases
             steps = 2 if target_words == 1000 else (3 if target_words == 1500 else 4)
             words_per_step = target_words // steps
 
-            for i in range(steps):
-                status.write(f"Writing Phase {i+1} of {steps}...")
-                
-                # Small pause to keep Google happy
-                if i > 0: time.sleep(5) 
+            model_obj = genai.GenerativeModel(model_name)
 
-                step_prompt = f"""
-                Persona: Helpful Consumer Expert. Product: {keyword} ({brand}). Length: {words_per_step} words.
-                Phase {i+1} focus: {'Meta Data & Intro' if i==0 else 'Main features & usage' if i<steps-1 else 'FAQ & Verdict'}
+            for i in range(steps):
+                status.write(f"Generating Part {i+1} of {steps}...")
                 
-                RULES: 
-                - New H2 or H3 Heading before EVERY single paragraph using "{keyword}" or related terms.
-                - Language: Simple and attractive. No technical jargon. 
-                - Plain text Meta Title and Description. NO HTML.
-                - Avoid AI words: delve, unlock, tapestry, unleash.
-                Data: {extra_info}
+                # Critical 15-second sleep to prevent 429 Errors
+                if i > 0:
+                    status.write("⏱️ Cool-down period (15s) to stay under Google's limit...")
+                    time.sleep(15)
+
+                prompt = f"""
+                Persona: Helpful Consumer Expert. Topic: {keyword} ({brand}).
+                Current Section: Phase {i+1} of {steps}. Length: {words_per_step} words.
+
+                RULES:
+                1. HEADING BEFORE EVERY PARAGRAPH: Every single paragraph must be preceded by a new H2 or H3 heading.
+                2. HEADINGS MUST USE "{keyword}" or related LSI terms.
+                3. LANGUAGE: Simple, matured, and attractive. Focus on main points.
+                4. NO HTML: Provide Meta Title and Description in plain text.
+                5. NO AI WORDS: Avoid delve, unlock, tapestry, unleash, in conclusion.
+                
+                Focus: {'Meta Data & Introduction' if i==0 else 'Main features & performance' if i<steps-1 else 'FAQ & Final Verdict'}
+                Product Specs: {extra_info}
                 """
                 
-                section_text = write_section_safe(user_api_key, working_model, step_prompt)
+                chunk = safe_generate(model_obj, prompt)
                 
-                if "ERROR" in section_text or "QUOTA_ERROR" in section_text:
-                    st.error(section_text)
+                if "ERROR" in chunk or "QUOTA_ERROR" in chunk:
+                    st.error(chunk)
                     break
                 else:
-                    full_content += section_text + "\n\n"
+                    full_content += chunk + "\n\n"
 
-            if full_content:
-                status.update(label="✅ Article Complete!", state="complete")
+            if full_content and "ERROR" not in full_content:
+                status.update(label="✅ Article Fully Generated!", state="complete")
                 st.markdown("---")
                 st.markdown(full_content)
                 st.download_button("Download Review", full_content, file_name=f"{keyword}.txt")
