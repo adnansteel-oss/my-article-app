@@ -4,8 +4,12 @@ import time
 import urllib.parse
 import random
 
-# ------------------ CONFIG ------------------
+# ------------------ PAGE CONFIG ------------------
 st.set_page_config(page_title="SEO Article SaaS", layout="wide")
+
+# ------------------ SESSION ------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
 # ------------------ STYLE ------------------
 st.markdown("""
@@ -20,23 +24,25 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ------------------ SESSION ------------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+# ------------------ LOGIN PAGE ------------------
+def login_page():
+    st.title("🔒 Login to SEO Article Generator")
 
-# ------------------ LOGIN ------------------
-def login():
-    st.title("🔐 Login to SEO SaaS")
+    with st.form("login_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        submit = st.form_submit_button("Login")
 
-    email = st.text_input("Email")
-    pwd = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        if email == "admin@email.com" and pwd == "1234":
-            st.session_state.logged_in = True
-            st.rerun()
-        else:
-            st.error("Invalid credentials")
+        if submit:
+            if not email or not password:
+                st.warning("Please fill all fields")
+            elif email == "admin@email.com" and password == "1234":
+                st.session_state.logged_in = True
+                st.success("Login successful!")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("Invalid email or password")
 
 # ------------------ MODEL DETECTION ------------------
 @st.cache_data
@@ -45,12 +51,12 @@ def get_model(api_key):
     models = genai.list_models()
 
     for m in models:
-        if "gemini" in m.name and "generateContent" in m.supported_generation_methods:
+        if "generateContent" in m.supported_generation_methods:
             return m.name
 
     return "models/gemini-1.5-flash"
 
-# ------------------ GENERATOR ------------------
+# ------------------ GENERATION FUNCTION ------------------
 def generate_article(api_key, model_name, keyword, brand, info, word_count):
 
     genai.configure(api_key=api_key)
@@ -70,14 +76,14 @@ def generate_article(api_key, model_name, keyword, brand, info, word_count):
     - SEO Title
     - Meta Description
     - Introduction
-    - Features & Benefits (with headings)
+    - Features & Benefits
     - Pros & Cons
     - FAQs
     - Final Verdict
 
     RULES:
     - Use simple English
-    - Every section must have headings
+    - Use headings for each section
     - No AI words like: delve, unlock, unleash
     - Write approx {word_count} words
     - Focus on buyer intent
@@ -93,12 +99,12 @@ def generate_article(api_key, model_name, keyword, brand, info, word_count):
         except Exception as e:
             time.sleep(5)
 
-    return "ERROR: Failed after retries"
+    return "ERROR: Failed to generate content"
 
 # ------------------ MAIN APP ------------------
-def app():
+def main_app():
 
-    st.title("🛍️ SEO Article Generator (SaaS Version)")
+    st.title("🛍️ SEO Article Generator")
 
     if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
@@ -108,53 +114,59 @@ def app():
         st.header("Settings")
 
         api_key = st.text_input("Google API Key", type="password")
-
         word_count = st.selectbox("Word Count", [1000, 1500, 2000])
 
         keyword = st.text_input("Product Name")
-        brand = st.text_input("Brand")
+        brand = st.text_input("Brand Name")
 
-        info = st.text_area("Features / Details")
+        info = st.text_area("Product Features / Details")
 
-        img_prompt = st.text_area("Image Prompt", "product photography, 4k, studio lighting")
+        img_prompt = st.text_area(
+            "Image Prompt",
+            "product photography, ultra realistic, 4k, studio lighting"
+        )
 
     if st.button("🚀 Generate Article"):
 
         if not api_key.startswith("AIza"):
-            st.error("Invalid API Key")
+            st.error("Enter valid Google API Key")
             return
 
         if not keyword:
             st.error("Enter product name")
             return
 
-        # IMAGE
-        clean = urllib.parse.quote(img_prompt)
-        img_url = f"https://image.pollinations.ai/prompt/{clean}?width=1024&height=768&seed={random.randint(1,9999)}"
-
+        # -------- IMAGE --------
+        clean_prompt = urllib.parse.quote(img_prompt)
+        img_url = f"https://image.pollinations.ai/prompt/{clean_prompt}?width=1024&height=768&seed={random.randint(1,9999)}"
         st.image(img_url, use_container_width=True)
 
-        # MODEL
+        # -------- MODEL --------
         model_name = get_model(api_key)
         st.info(f"Using model: {model_name}")
 
-        with st.spinner("Writing article..."):
+        # -------- GENERATE --------
+        with st.spinner("Writing SEO article..."):
             article = generate_article(api_key, model_name, keyword, brand, info, word_count)
 
         if "ERROR" in article:
             st.error(article)
         else:
-            st.success("Article generated!")
+            st.success("Article Generated!")
 
             st.markdown("---")
             st.markdown(article)
 
-            st.download_button("Download", article, file_name=f"{keyword}.txt")
+            st.download_button(
+                "📥 Download Article",
+                article,
+                file_name=f"{keyword}.txt"
+            )
 
-            st.code(article)  # easy copy
+            st.code(article)
 
-# ------------------ FLOW ------------------
+# ------------------ APP FLOW ------------------
 if st.session_state.logged_in:
-    app()
+    main_app()
 else:
-    login()
+    login_page()
