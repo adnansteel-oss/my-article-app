@@ -4,119 +4,142 @@ import random
 import urllib.parse
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="SEO Heading-Rich Article Creator", layout="wide")
+st.set_page_config(page_title="Free SEO Article Factory", layout="wide")
 
 # --- UI STYLING ---
 st.markdown("""
     <style>
-    .stSelectbox, .stTextArea, .stTextInput { background-color: #ffffff; border-radius: 8px; }
-    .stButton>button { background: #FF9900; color: white; font-weight: bold; width: 100%; border: none; height: 3em; border-radius: 5px; }
+    .stButton>button { background: #FF9900; color: white; font-weight: bold; width: 100%; border-radius: 5px; }
+    .login-box { background-color: #f0f2f6; padding: 20px; border-radius: 10px; border: 1px solid #ddd; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🚀 SEO Heading-Rich Article Factory")
-st.write("Generate simple, attractive articles with keyword-rich headings for every paragraph.")
+# --- SESSION STATE FOR LOGIN ---
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
 
-# --- SIDEBAR / OPTIONS ---
-with st.sidebar:
-    st.header("🔑 Setup")
-    api_key = st.text_input("Google AI API Key", type="password")
+# --- LOGIN PAGE ---
+def login_page():
+    st.title("🔒 Access the Article Factory")
+    st.write("Please log in to start creating 100% humanized SEO articles.")
     
-    st.header("📏 Article Length")
-    word_count_option = st.selectbox(
-        "Select Target Length:",
-        ["1000 Words", "1500 Words", "2000 Words"]
-    )
-    target_words = int(word_count_option.split()[0])
+    with st.container():
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            st.markdown("### User Login")
+            email = st.text_input("Email Address")
+            password = st.text_input("Password", type="password")
+            if st.button("Log In"):
+                if email and password: # You can add specific password check here
+                    st.session_state['logged_in'] = True
+                    st.rerun()
+                else:
+                    st.error("Please enter both email and password.")
+        
+        with col2:
+            st.markdown("### 📢 Important Note")
+            st.info("""
+            **Why do I need a Google API Key?**
+            To keep this service **FREE for everyone**, every user uses their own dedicated power from Google. 
+            
+            1. It takes 30 seconds to get one.
+            2. It is **100% Free**.
+            3. Your articles will generate faster.
+            
+            [👉 Click Here to Get Your Free Key](https://aistudio.google.com/app/apikey)
+            """)
 
-    st.header("📦 Product Info")
-    keyword = st.text_input("Product Name", placeholder="e.g. Sony WH-1000XM5")
-    brand = st.text_input("Brand Name", placeholder="e.g. Sony")
-    extra_info = st.text_area("Main Features / Points")
+# --- ARTICLE GENERATOR PAGE ---
+def main_app():
+    # Logout button in sidebar
+    if st.sidebar.button("Log Out"):
+        st.session_state['logged_in'] = False
+        st.rerun()
 
-    st.header("🖼️ Image Settings")
-    image_prompt = st.text_area("Describe the Image", "High-quality lifestyle product photo")
+    st.title("🛍️ Smart SEO Article Factory")
+    st.write("Create high-quality Amazon Affiliate reviews in seconds.")
 
-# --- MODEL LOADER ---
-def get_best_model(key):
-    try:
-        genai.configure(api_key=key)
-        all_models = genai.list_models()
-        model_names = [m.name for m in all_models if 'generateContent' in m.supported_generation_methods]
-        for name in model_names:
-            if "gemini-1.5-flash" in name: return name
-        return model_names[0] if model_names else None
-    except: return None
+    # --- SIDEBAR OPTIONS ---
+    with st.sidebar:
+        st.header("🔑 Your API Key")
+        user_api_key = st.text_input("Paste Your Google API Key Here", type="password")
+        
+        st.header("📏 Article Length")
+        word_count_option = st.selectbox("Word Count:", ["1000 Words", "1500 Words", "2000 Words"])
+        target_words = int(word_count_option.split()[0])
 
-def write_section(key, model_name, prompt):
-    try:
-        genai.configure(api_key=key)
-        model = genai.GenerativeModel(model_name)
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e: return f"Error: {str(e)}"
+        st.header("📦 Product Info")
+        keyword = st.text_input("Product Name")
+        brand = st.text_input("Brand Name")
+        extra_info = st.text_area("Features / Main Points")
 
-# --- MAIN APP LOGIC ---
-if st.button("🚀 Generate SEO Article Now"):
-    if not api_key:
-        st.error("Please enter your API Key!")
-    else:
-        # 1. GENERATE IMAGE
-        st.subheader("🖼️ Product Visual")
-        clean_img_prompt = urllib.parse.quote(image_prompt)
-        seed = random.randint(1, 99999)
-        img_url = f"https://image.pollinations.ai/prompt/{clean_img_prompt}?width=1024&height=768&nologo=true&seed={seed}"
-        st.image(img_url, use_container_width=True)
+        st.header("🖼️ Image Settings")
+        image_prompt = st.text_area("Describe the Image", "High quality product photo on a clean background")
 
-        # 2. START ARTICLE GENERATION
-        best_model = get_best_model(api_key)
-        if not best_model:
-            st.error("API Error. Check your key.")
+    # --- CORE FUNCTIONS ---
+    def get_best_model(key):
+        try:
+            genai.configure(api_key=key)
+            model_names = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            return next((n for n in model_names if "gemini-1.5-flash" in n), model_names[0])
+        except: return None
+
+    def write_section(key, model_name, prompt):
+        try:
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel(model_name)
+            return model.generate_content(prompt).text
+        except Exception as e: return f"Error: {str(e)}"
+
+    # --- ACTION ---
+    if st.button("🚀 Generate SEO Article Now"):
+        if not user_api_key:
+            st.error("You must enter your own Google API Key to use this tool.")
+        elif not keyword:
+            st.error("Please enter a Product Name.")
         else:
-            full_content = ""
-            status = st.status(f"Creating your {target_words} word review...")
-            
-            # Divide work to control word count
-            steps = 2 if target_words == 1000 else (3 if target_words == 1500 else 4)
-            words_per_step = target_words // steps
+            # 1. IMAGE
+            st.subheader("🖼️ Product Visual")
+            clean_img = urllib.parse.quote(image_prompt)
+            img_url = f"https://image.pollinations.ai/prompt/{clean_img}?width=1024&height=768&nologo=true&seed={random.randint(1,9999)}"
+            st.image(img_url, use_container_width=True)
 
-            for i in range(steps):
-                status.write(f"Writing Part {i+1}...")
+            # 2. CONTENT
+            best_model = get_best_model(user_api_key)
+            if not best_model:
+                st.error("Invalid API Key. Please check your Google AI Studio Key.")
+            else:
+                full_content = ""
+                status = st.status("Writing article...")
+                steps = 2 if target_words == 1000 else (3 if target_words == 1500 else 4)
                 
-                step_prompt = f"""
-                You are a Helpful Product Reviewer and SEO Expert. 
-                Topic: {keyword} ({brand}).
-                Section: Phase {i+1} of {steps}. Target: {words_per_step} words.
-
-                STRICT FORMATTING RULES:
-                1. HEADING AFTER EVERY PARAGRAPH: You must start a new H2 or H3 heading before EVERY single paragraph of text. 
-                2. SEO HEADINGS: Every heading MUST contain the main keyword "{keyword}" or related LSI (Latent Semantic Indexing) keywords.
-                3. NO HTML: Use plain text for Meta Title and Meta Description.
-                4. SIMPLE LANGUAGE: Use clear, easy-to-understand language. Focus on the main points and buyer benefits.
-                5. HUMANIZED: Write like a real person who loves the product. Do not use AI words like "delve", "unlock", "tapestry", "unleash".
-                6. KNOWLEDGEABLE: Provide attractive and useful information for a visitor who wants to buy this.
-
-                Phase 1: Meta Title, Meta Description, H1, and Intro.
-                Middle Phases: Detailed features, pros/cons, and real-life usage.
-                Final Phase: FAQ (6 questions), Maintenance, and Conclusion.
-
-                Product Features to mention: {extra_info}
-                """
+                for i in range(steps):
+                    status.write(f"Writing Phase {i+1}...")
+                    step_prompt = f"""
+                    Reviewer Persona: Helpful Consumer Expert.
+                    Product: {keyword} ({brand}).
+                    Length: {target_words // steps} words for this section.
+                    
+                    SEO RULES:
+                    - Use simple language.
+                    - Start every new paragraph with a new H2 or H3 Heading.
+                    - Use "{keyword}" or related LSI terms in every heading.
+                    - No HTML tags.
+                    - Avoid: delve, unlock, tapestry, unleash.
+                    
+                    Phase {i+1} Focus: 
+                    {'Meta Title/Desc/H1 and Intro' if i==0 else 'Main points and usage' if i < steps-1 else 'FAQs and Final Verdict'}
+                    Data: {extra_info}
+                    """
+                    full_content += write_section(user_api_key, best_model, step_prompt) + "\n\n"
                 
-                section_text = write_section(api_key, best_model, step_prompt)
-                full_content += section_text + "\n\n"
+                status.update(label="✅ Finished!", state="complete")
+                st.markdown("---")
+                st.markdown(full_content)
+                st.download_button("Download Review", full_content, file_name="review.txt")
 
-            status.update(label="✅ Article Complete!", state="complete")
-
-            # --- DISPLAY ---
-            st.markdown("---")
-            st.markdown(full_content)
-            
-            final_count = len(full_content.split())
-            st.info(f"Final Word Count: {final_count} words.")
-            
-            st.download_button(
-                label=f"📥 Download SEO Review",
-                data=full_content,
-                file_name=f"{keyword.replace(' ', '_')}_SEO.txt"
-            )
+# --- APP FLOW ---
+if st.session_state['logged_in']:
+    main_app()
+else:
+    login_page()
