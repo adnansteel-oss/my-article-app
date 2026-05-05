@@ -4,8 +4,8 @@ import random
 import urllib.parse
 import time
 
-# --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="LUMINA SEO Factory", layout="wide")
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Professional SEO Article Factory", layout="wide")
 
 # --- UI STYLING ---
 st.markdown("""
@@ -24,8 +24,8 @@ def login_page():
     st.title("🔒 Access SEO Article Factory")
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.markdown("### Login")
-        email = st.text_input("Email")
+        st.markdown("### User Login")
+        email = st.text_input("Email Address")
         pwd = st.text_input("Password", type="password")
         if st.button("Log In"):
             if email and pwd:
@@ -34,45 +34,41 @@ def login_page():
     with col2:
         st.info("To keep this tool free, get your own API Key from [Google AI Studio](https://aistudio.google.com/app/apikey)")
 
-# --- THE 404 FIX: AGGRESSIVE DISCOVERY ---
+# --- THE 404 FIX: STABLE MODEL SELECTION ---
 def get_verified_model(api_key):
     try:
         genai.configure(api_key=api_key)
-        # We look through all models to find the exact name Google wants
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        all_models = genai.list_models()
         
-        # Priority 1: Search for 'gemini-1.5-flash'
-        for m in models:
-            if "gemini-1.5-flash" in m:
-                return m
-        # Priority 2: Any 1.5 model
-        for m in models:
-            if "1.5" in m:
-                return m
-        # Priority 3: Fallback to the first available model
-        return models[0]
-    except Exception as e:
-        return f"MODEL_DISCOVERY_ERROR: {str(e)}"
+        # We look for the STABLE production name first
+        stable_names = ["models/gemini-1.5-flash", "models/gemini-1.5-flash-latest"]
+        
+        # Get list of all model names allowed for your key
+        allowed_names = [m.name for m in all_models if 'generateContent' in m.supported_generation_methods]
+        
+        # 1. Check if stable names exist in allowed names
+        for name in stable_names:
+            if name in allowed_names:
+                return name
+        
+        # 2. Otherwise, find any flash model that is NOT 'robotics' or 'preview'
+        for name in allowed_names:
+            if "gemini-1.5-flash" in name and "robotics" not in name and "preview" not in name:
+                return name
+                
+        return "models/gemini-1.5-flash" # Absolute fallback
+    except:
+        return "models/gemini-1.5-flash"
 
 # --- SECURE GENERATION ENGINE ---
 def safe_generate(model_name, api_key, prompt):
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(model_name=model_name)
-    max_retries = 3
-    
-    for attempt in range(max_retries):
-        try:
-            response = model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            err_msg = str(e)
-            if "429" in err_msg or "quota" in err_msg.lower():
-                wait = 30 * (attempt + 1)
-                st.warning(f"⚠️ Limit reached. Auto-retry in {wait}s...")
-                time.sleep(wait)
-            else:
-                return f"ERROR_STOP: {err_msg}"
-    return "ERROR_STOP: Maximum retries reached for quota."
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name=model_name)
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"ERROR_STOP: {str(e)}"
 
 # --- MAIN APP ---
 def main_app():
@@ -80,7 +76,7 @@ def main_app():
         st.session_state['logged_in'] = False
         st.rerun()
 
-    st.title("🛍️ Amazon Affiliate SEO Factory")
+    st.title("🛍️ Amazon Affiliate SEO Article Factory")
 
     with st.sidebar:
         st.header("🔑 Your API Key")
@@ -93,12 +89,12 @@ def main_app():
         st.header("📦 Product Details")
         kw = st.text_input("Product Name")
         br = st.text_input("Brand Name")
-        info = st.text_area("Features")
+        info = st.text_area("Features / Main Points")
         
-        st.header("🖼️ Image")
-        img_p = st.text_area("Image Prompt", "Professional product photo")
+        st.header("🖼️ Image Setting")
+        img_p = st.text_area("Describe Image", "Professional product photography")
 
-    if st.button("🚀 Generate SEO Article"):
+    if st.button("🚀 Generate SEO Article Now"):
         if not u_key or not kw:
             st.error("Please provide API Key and Product Name.")
         else:
@@ -107,55 +103,52 @@ def main_app():
             img_url = f"https://image.pollinations.ai/prompt/{clean_p}?width=1024&height=768&nologo=true&seed={random.randint(1,9999)}"
             st.image(img_url, use_container_width=True)
 
-            # 2. Find Correct Model (Stops 404)
+            # 2. Find Correct Stable Model (Stops the Robotics 404)
             m_name = get_verified_model(u_key)
-            if "ERROR" in m_name:
-                st.error(f"Could not connect to Google: {m_name}")
-            else:
-                st.info(f"Connected to: {m_name}")
+            st.info(f"System: Connected via {m_name}")
                 
-                # 3. Write Article in Phases
-                full_art = ""
-                steps = 2 if target_wc == 1000 else (3 if target_wc == 1500 else 4)
-                words_per_step = target_wc // steps
+            # 3. Write Article in Phases
+            full_art = ""
+            steps = 2 if target_wc == 1000 else (3 if target_wc == 1500 else 4)
+            words_per_step = target_wc // steps
+            
+            status = st.status(f"Writing your {target_wc} word expert review...")
+            
+            for i in range(steps):
+                status.write(f"✍️ Writing Phase {i+1} of {steps}...")
                 
-                status = st.status(f"Writing your {target_wc} word expert review...")
-                
-                for i in range(steps):
-                    status.write(f"✍️ Phase {i+1} of {steps}...")
-                    
-                    # 15s Sleep between phases to prevent 429
-                    if i > 0:
-                        time.sleep(15)
+                # 15s Sleep between phases to prevent 429 Limit
+                if i > 0:
+                    time.sleep(15)
 
-                    prompt = f"""
-                    Role: Experienced Amazon Product Reviewer. Topic: {kw} ({br}).
-                    Goal: Matured, simple, and knowledgeable article. 
-                    Length: {words_per_step} words for this section.
-                    
-                    SEO & FORMATTING RULES:
-                    1. HEADING BEFORE EVERY PARAGRAPH: Start every paragraph with a new H2 or H3 heading.
-                    2. KEYWORD HEADINGS: Headings must use "{kw}" or related LSI terms.
-                    3. SIMPLE LANGUAGE: Easy to read, focusing on main benefits.
-                    4. PLAIN TEXT META: No HTML tags like <meta>.
-                    5. NO AI WORDS: Avoid delve, unlock, tapestry, unleash.
-                    
-                    Section {i+1} Focus: {'Meta Data & Intro' if i==0 else 'Main features/usage' if i < steps-1 else 'FAQ & Verdict'}
-                    Data: {info}
-                    """
-                    
-                    chunk = safe_generate(m_name, u_key, prompt)
-                    if "ERROR_STOP" in chunk:
-                        st.error(chunk)
-                        break
-                    else:
-                        full_art += chunk + "\n\n"
+                prompt = f"""
+                Persona: Helpful Consumer Expert Reviewer. Topic: {kw} ({br}).
+                Goal: Write a simple, matured, and knowledgeable Amazon affiliate article. 
+                Section: Phase {i+1} of {steps}. Length: {words_per_step} words.
+                
+                SEO & FORMATTING RULES:
+                1. HEADING BEFORE EVERY PARAGRAPH: You MUST start every new paragraph with a new H2 or H3 heading.
+                2. KEYWORD HEADINGS: Headings must use "{kw}" or related LSI terms.
+                3. SIMPLE LANGUAGE: Easy to read English focusing on main points and benefits.
+                4. PLAIN TEXT META: No HTML tags.
+                5. NO AI WORDS: Avoid delve, unlock, tapestry, unleash, in conclusion.
+                
+                Section {i+1} Focus: {'Meta Data & Attractive Introduction' if i==0 else 'Key features and usage analysis' if i < steps-1 else 'FAQ & Final Expert Verdict'}
+                Data: {info}
+                """
+                
+                chunk = safe_generate(m_name, u_key, prompt)
+                if "ERROR_STOP" in chunk:
+                    st.error(f"Google Limit/Error: {chunk}. Please wait 1 minute and click generate again.")
+                    break
+                else:
+                    full_art += chunk + "\n\n"
 
-                if full_art and "ERROR_STOP" not in full_art:
-                    status.update(label="✅ Article Generated!", state="complete")
-                    st.markdown("---")
-                    st.markdown(full_art)
-                    st.download_button("Download Review", full_art, file_name=f"{kw}.txt")
+            if full_art and "ERROR_STOP" not in full_art:
+                status.update(label="✅ Article Fully Generated!", state="complete")
+                st.markdown("---")
+                st.markdown(full_art)
+                st.download_button("Download Review", full_art, file_name=f"{kw}.txt")
 
 # --- APP FLOW ---
 if st.session_state['logged_in']:
