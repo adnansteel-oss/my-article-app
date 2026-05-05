@@ -5,174 +5,157 @@ import urllib.parse
 import time
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Professional SEO Article Factory", layout="wide")
+st.set_page_config(page_title="LUMINA SEO Factory", layout="wide")
 
-# --- CUSTOM CSS FOR PROFESSIONAL LOOK ---
+# --- UI STYLING ---
 st.markdown("""
     <style>
     .stSelectbox, .stTextArea, .stTextInput { background-color: #ffffff; border-radius: 8px; }
     .stButton>button { background: #FF9900; color: white; font-weight: bold; width: 100%; border-radius: 5px; height: 3em; }
-    .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SESSION STATE FOR LOGIN ---
+# --- LOGIN SESSION ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
 # --- LOGIN PAGE ---
 def login_page():
-    st.title("🔒 SEO Article Factory Access")
-    st.write("Please enter your details to access the professional generator.")
-    
+    st.title("🔒 Access SEO Article Factory")
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.markdown("### User Login")
-        email = st.text_input("Email Address")
-        password = st.text_input("Password", type="password")
+        st.markdown("### Login")
+        email = st.text_input("Email")
+        pwd = st.text_input("Password", type="password")
         if st.button("Log In"):
-            if email and password:
+            if email and pwd:
                 st.session_state['logged_in'] = True
                 st.rerun()
-            else:
-                st.error("Please enter both email and password.")
-    
     with col2:
-        st.markdown("### 📢 Why do I need a Key?")
-        st.info("""
-        To keep this service **FREE**, every user uses their own Google API Power. 
-        - It is 100% Free.
-        - Takes 30 seconds to get.
-        - Keeps your data private.
-        
-        [👉 Click here to get your Free Google API Key](https://aistudio.google.com/app/apikey)
-        """)
+        st.info("To keep this tool free, get your own API Key from [Google AI Studio](https://aistudio.google.com/app/apikey)")
 
-# --- CORE FUNCTIONS ---
-
-def get_verified_model_name(api_key):
-    """Detects the correct model name for the user's specific account (Fixes 404)."""
+# --- THE 404 FIX: AGGRESSIVE DISCOVERY ---
+def get_verified_model(api_key):
     try:
         genai.configure(api_key=api_key)
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                if 'gemini-1.5-flash' in m.name:
-                    return m.name
-        return "models/gemini-1.5-flash"
-    except:
-        return "models/gemini-1.5-flash"
+        # We look through all models to find the exact name Google wants
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # Priority 1: Search for 'gemini-1.5-flash'
+        for m in models:
+            if "gemini-1.5-flash" in m:
+                return m
+        # Priority 2: Any 1.5 model
+        for m in models:
+            if "1.5" in m:
+                return m
+        # Priority 3: Fallback to the first available model
+        return models[0]
+    except Exception as e:
+        return f"MODEL_DISCOVERY_ERROR: {str(e)}"
 
-def safe_generate_content(model_instance, prompt):
-    """Handles the actual generation with retry logic for quota issues (Fixes 429)."""
+# --- SECURE GENERATION ENGINE ---
+def safe_generate(model_name, api_key, prompt):
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(model_name=model_name)
     max_retries = 3
+    
     for attempt in range(max_retries):
         try:
-            response = model_instance.generate_content(prompt)
+            response = model.generate_content(prompt)
             return response.text
         except Exception as e:
-            if "429" in str(e) or "quota" in str(e).lower():
-                wait_time = 30 * (attempt + 1)
-                st.warning(f"⚠️ Google limit reached. Auto-waiting {wait_time}s and retrying...")
-                time.sleep(wait_time)
+            err_msg = str(e)
+            if "429" in err_msg or "quota" in err_msg.lower():
+                wait = 30 * (attempt + 1)
+                st.warning(f"⚠️ Limit reached. Auto-retry in {wait}s...")
+                time.sleep(wait)
             else:
-                return f"ERROR_STOP: {str(e)}"
-    return "ERROR_STOP: Quota exceeded after retries."
+                return f"ERROR_STOP: {err_msg}"
+    return "ERROR_STOP: Maximum retries reached for quota."
 
-# --- MAIN APPLICATION ---
+# --- MAIN APP ---
 def main_app():
     if st.sidebar.button("Log Out"):
         st.session_state['logged_in'] = False
         st.rerun()
 
-    st.title("🛍️ Amazon Affiliate SEO Article Factory")
-    st.write("Generate matured, simple, and high-ranking product reviews with SEO headings.")
+    st.title("🛍️ Amazon Affiliate SEO Factory")
 
     with st.sidebar:
-        st.header("🔑 Your API Credentials")
-        user_key = st.text_input("Paste Your Google API Key", type="password")
+        st.header("🔑 Your API Key")
+        u_key = st.text_input("Paste Google API Key", type="password")
         
-        st.header("📏 Article Length")
-        word_count_option = st.selectbox("Select Word Count:", ["1000 Words", "1500 Words", "2000 Words"])
-        target_words = int(word_count_option.split()[0])
+        st.header("📏 Word Count")
+        wc_opt = st.selectbox("Options:", ["1000 Words", "1500 Words", "2000 Words"])
+        target_wc = int(wc_opt.split()[0])
         
-        st.header("📦 Product Info")
-        keyword = st.text_input("Product Name (e.g. Sony Headphones)")
-        brand = st.text_input("Brand Name")
-        extra_info = st.text_area("Features / Main Points")
+        st.header("📦 Product Details")
+        kw = st.text_input("Product Name")
+        br = st.text_input("Brand Name")
+        info = st.text_area("Features")
         
-        st.header("🖼️ Image Settings")
-        image_prompt_input = st.text_area("Describe the Image", "Professional lifestyle photography of the product")
+        st.header("🖼️ Image")
+        img_p = st.text_area("Image Prompt", "Professional product photo")
 
-    # --- EXECUTION ---
-    if st.button("🚀 Generate High-Quality Article"):
-        if not user_key or not keyword:
-            st.error("Please provide both your API Key and Product Name.")
+    if st.button("🚀 Generate SEO Article"):
+        if not u_key or not kw:
+            st.error("Please provide API Key and Product Name.")
         else:
-            # 1. Image Generation
-            st.subheader("🖼️ Product Visual")
-            clean_img = urllib.parse.quote(image_prompt_input)
-            img_url = f"https://image.pollinations.ai/prompt/{clean_img}?width=1024&height=768&nologo=true&seed={random.randint(1,99999)}"
+            # 1. Image
+            clean_p = urllib.parse.quote(img_p)
+            img_url = f"https://image.pollinations.ai/prompt/{clean_p}?width=1024&height=768&nologo=true&seed={random.randint(1,9999)}"
             st.image(img_url, use_container_width=True)
 
-            # 2. Setup Model
-            model_name = get_verified_model_name(user_key)
-            st.info(f"System: Connected via {model_name}")
-            model_obj = genai.GenerativeModel(model_name)
-
-            # 3. Generate Article in Phases
-            full_article = ""
-            status = st.status(f"Writing your {target_words} word expert review...")
-            
-            # Divide target into 500-word chunks (Phases)
-            steps = 2 if target_words == 1000 else (3 if target_words == 1500 else 4)
-            words_per_step = target_words // steps
-
-            for i in range(steps):
-                status.write(f"✍️ Writing Phase {i+1} of {steps}...")
+            # 2. Find Correct Model (Stops 404)
+            m_name = get_verified_model(u_key)
+            if "ERROR" in m_name:
+                st.error(f"Could not connect to Google: {m_name}")
+            else:
+                st.info(f"Connected to: {m_name}")
                 
-                # --- The 429 Prevention: 15-second pause between requests ---
-                if i > 0:
-                    time.sleep(15)
-
-                prompt = f"""
-                Persona: Helpful Consumer Expert & Amazon Reviewer.
-                Topic: {keyword} ({brand}).
-                Section: Phase {i+1} of {steps}. Length: {words_per_step} words.
-
-                STRICT FORMATTING & CONTENT RULES:
-                1. NEW HEADING BEFORE EVERY PARAGRAPH: You MUST start a new H2 or H3 heading before EVERY single paragraph of text.
-                2. SEO HEADINGS: Every heading must use the keyword "{keyword}" or related LSI terms.
-                3. SIMPLE LANGUAGE: Use clear, matured, and attractive English. Focus on the main points and benefits. Do not use hard technical science.
-                4. PLAIN TEXT META: Provide Meta Title and Meta Description in PLAIN TEXT only. DO NOT use <meta> or HTML tags.
-                5. NO AI CLICHES: Do not use: delve, unlock, tapestry, unleash, in conclusion.
-                6. VALUE: Provide knowledgeable insights about build quality, real-life usage, and consumer benefits.
-
-                Phase {i+1} Focus: 
-                {'Meta Title, Meta Description, H1, and Attractive Introduction' if i==0 else 'Key features, performance, and daily usage' if i < steps-1 else 'Maintenance tips, 6 Buyer FAQs, and Final Expert Verdict'}
+                # 3. Write Article in Phases
+                full_art = ""
+                steps = 2 if target_wc == 1000 else (3 if target_wc == 1500 else 4)
+                words_per_step = target_wc // steps
                 
-                Data to use: {extra_info}
-                """
+                status = st.status(f"Writing your {target_wc} word expert review...")
                 
-                chunk = safe_generate_content(model_obj, prompt)
-                
-                if "ERROR_STOP" in chunk:
-                    st.error(chunk)
-                    break
-                else:
-                    full_article += chunk + "\n\n"
+                for i in range(steps):
+                    status.write(f"✍️ Phase {i+1} of {steps}...")
+                    
+                    # 15s Sleep between phases to prevent 429
+                    if i > 0:
+                        time.sleep(15)
 
-            if full_article and "ERROR_STOP" not in full_article:
-                status.update(label="✅ Article Fully Generated!", state="complete")
-                st.markdown("---")
-                st.markdown(full_content := full_article)
-                
-                st.download_button(
-                    label=f"📥 Download {target_words} Word Review",
-                    data=full_content,
-                    file_name=f"{keyword.replace(' ', '_')}.txt"
-                )
+                    prompt = f"""
+                    Role: Experienced Amazon Product Reviewer. Topic: {kw} ({br}).
+                    Goal: Matured, simple, and knowledgeable article. 
+                    Length: {words_per_step} words for this section.
+                    
+                    SEO & FORMATTING RULES:
+                    1. HEADING BEFORE EVERY PARAGRAPH: Start every paragraph with a new H2 or H3 heading.
+                    2. KEYWORD HEADINGS: Headings must use "{kw}" or related LSI terms.
+                    3. SIMPLE LANGUAGE: Easy to read, focusing on main benefits.
+                    4. PLAIN TEXT META: No HTML tags like <meta>.
+                    5. NO AI WORDS: Avoid delve, unlock, tapestry, unleash.
+                    
+                    Section {i+1} Focus: {'Meta Data & Intro' if i==0 else 'Main features/usage' if i < steps-1 else 'FAQ & Verdict'}
+                    Data: {info}
+                    """
+                    
+                    chunk = safe_generate(m_name, u_key, prompt)
+                    if "ERROR_STOP" in chunk:
+                        st.error(chunk)
+                        break
+                    else:
+                        full_art += chunk + "\n\n"
 
-    st.markdown('<div class="footer">© 2024 Article Factory | Powered by Google Gemini 1.5 Flash</div>', unsafe_allow_html=True)
+                if full_art and "ERROR_STOP" not in full_art:
+                    status.update(label="✅ Article Generated!", state="complete")
+                    st.markdown("---")
+                    st.markdown(full_art)
+                    st.download_button("Download Review", full_art, file_name=f"{kw}.txt")
 
 # --- APP FLOW ---
 if st.session_state['logged_in']:
