@@ -4,7 +4,7 @@ import random
 import urllib.parse
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Simple SEO Article Creator", layout="wide")
+st.set_page_config(page_title="SEO Heading-Rich Article Creator", layout="wide")
 
 # --- UI STYLING ---
 st.markdown("""
@@ -14,8 +14,8 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🛍️ Smart & Simple Affiliate Article Generator")
-st.write("Generate easy-to-read, high-value product reviews for your visitors.")
+st.title("🚀 SEO Heading-Rich Article Factory")
+st.write("Generate simple, attractive articles with keyword-rich headings for every paragraph.")
 
 # --- SIDEBAR / OPTIONS ---
 with st.sidebar:
@@ -32,10 +32,10 @@ with st.sidebar:
     st.header("📦 Product Info")
     keyword = st.text_input("Product Name", placeholder="e.g. Sony WH-1000XM5")
     brand = st.text_input("Brand Name", placeholder="e.g. Sony")
-    extra_info = st.text_area("Product Features (Paste specs or main points here)")
+    extra_info = st.text_area("Main Features / Points")
 
     st.header("🖼️ Image Settings")
-    image_prompt = st.text_area("Describe the Image", "Professional product photo of the item in a clean, bright setting")
+    image_prompt = st.text_area("Describe the Image", "High-quality lifestyle product photo")
 
 # --- MODEL LOADER ---
 def get_best_model(key):
@@ -57,7 +57,7 @@ def write_section(key, model_name, prompt):
     except Exception as e: return f"Error: {str(e)}"
 
 # --- MAIN APP LOGIC ---
-if st.button("🚀 Generate Simple & Knowledgeable Article"):
+if st.button("🚀 Generate SEO Article Now"):
     if not api_key:
         st.error("Please enter your API Key!")
     else:
@@ -84,38 +84,39 @@ if st.button("🚀 Generate Simple & Knowledgeable Article"):
                 status.write(f"Writing Part {i+1}...")
                 
                 step_prompt = f"""
-                You are a Helpful Product Reviewer for a popular shopping blog. 
-                Your goal is to explain {keyword} ({brand}) in SIMPLE, EASY language.
-                Current Section: Phase {i+1} of {steps}. Target word count for this part: {words_per_step} words.
+                You are a Helpful Product Reviewer and SEO Expert. 
+                Topic: {keyword} ({brand}).
+                Section: Phase {i+1} of {steps}. Target: {words_per_step} words.
 
-                RULES:
-                1. NO HTML: For Meta Title and Description, use ONLY plain text. No <meta> tags.
-                2. LANGUAGE: Use simple, clear sentences. Do not go too deep into science or chemistry. 
-                3. FOCUS: Talk about why the product is good, how it feels to use, and the main features people care about.
-                4. KNOWLEDGE: Even though the language is simple, show that you know the product well. Mention quality, comfort, and real-life benefits.
-                5. NO AI WORDS: Do not use "delve", "unlock", "tapestry", "unleash", "in conclusion".
-                6. STRUCTURE: 
-                   - Phase 1: Clear Meta Title, Simple Meta Description, H1, and an inviting Intro.
-                   - Phase 2/3: The Main Points of the product, why it's better than others, and Pros/Cons.
-                   - Final Phase: Who should buy this, 6 common Buyer FAQs, and a final simple summary.
+                STRICT FORMATTING RULES:
+                1. HEADING AFTER EVERY PARAGRAPH: You must start a new H2 or H3 heading before EVERY single paragraph of text. 
+                2. SEO HEADINGS: Every heading MUST contain the main keyword "{keyword}" or related LSI (Latent Semantic Indexing) keywords.
+                3. NO HTML: Use plain text for Meta Title and Meta Description.
+                4. SIMPLE LANGUAGE: Use clear, easy-to-understand language. Focus on the main points and buyer benefits.
+                5. HUMANIZED: Write like a real person who loves the product. Do not use AI words like "delve", "unlock", "tapestry", "unleash".
+                6. KNOWLEDGEABLE: Provide attractive and useful information for a visitor who wants to buy this.
 
-                Product Data: {extra_info}
+                Phase 1: Meta Title, Meta Description, H1, and Intro.
+                Middle Phases: Detailed features, pros/cons, and real-life usage.
+                Final Phase: FAQ (6 questions), Maintenance, and Conclusion.
+
+                Product Features to mention: {extra_info}
                 """
                 
                 section_text = write_section(api_key, best_model, step_prompt)
                 full_content += section_text + "\n\n"
 
-            status.update(label="✅ Review Ready!", state="complete")
+            status.update(label="✅ Article Complete!", state="complete")
 
             # --- DISPLAY ---
             st.markdown("---")
             st.markdown(full_content)
             
             final_count = len(full_content.split())
-            st.info(f"Final Count: {final_count} words.")
+            st.info(f"Final Word Count: {final_count} words.")
             
             st.download_button(
-                label=f"📥 Download Review",
+                label=f"📥 Download SEO Review",
                 data=full_content,
-                file_name=f"{keyword.replace(' ', '_')}.txt"
+                file_name=f"{keyword.replace(' ', '_')}_SEO.txt"
             )
