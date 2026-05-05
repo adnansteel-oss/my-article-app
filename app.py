@@ -11,11 +11,11 @@ st.set_page_config(page_title="Professional SEO Article Factory", layout="wide")
 st.markdown("""
     <style>
     .stSelectbox, .stTextArea, .stTextInput { background-color: #ffffff; border-radius: 8px; }
-    .stButton>button { background: #FF9900; color: white; font-weight: bold; width: 100%; border: none; height: 3em; border-radius: 5px; }
+    .stButton>button { background: #FF9900; color: white; font-weight: bold; width: 100%; border-radius: 5px; height: 3em; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SESSION STATE FOR LOGIN ---
+# --- SESSION STATE ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
@@ -32,25 +32,25 @@ def login_page():
                 st.session_state['logged_in'] = True
                 st.rerun()
     with col2:
-        st.info("**Free Access Guide:** Use your own Google API Key to keep this tool free. [Get Key Here](https://aistudio.google.com/app/apikey)")
+        st.info("**Free Access Guide:** Use your own Google API Key. [Get Key Here](https://aistudio.google.com/app/apikey)")
 
-# --- DYNAMIC MODEL FINDER (The 404 Fix) ---
-def find_working_model(api_key):
+# --- THE 404 FIX: DYNAMIC MODEL DISCOVERY ---
+def get_verified_model_name(api_key):
     try:
         genai.configure(api_key=api_key)
-        # We ask Google to list all models available to your specific key
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                # We prioritize 1.5 Flash as it is the most stable for free users
-                if 'gemini-1.5-flash' in m.name:
-                    return m.name
-        # Fallback if the specific string isn't found
+        # We list all models and find the one that Google recognizes for your key
+        available_models = genai.list_models()
+        for m in available_models:
+            # We look for the newest Flash model available to you
+            if 'gemini-1.5-flash' in m.name and 'generateContent' in m.supported_generation_methods:
+                return m.name
+        # If the loop finds nothing, we try the most common stable name
         return "models/gemini-1.5-flash"
-    except:
+    except Exception as e:
         return "models/gemini-1.5-flash"
 
-# --- SECURE GENERATOR (The 429 Fix) ---
-def safe_generate(model_instance, prompt):
+# --- THE 429 FIX: SECURE GENERATION ---
+def safe_write(model_instance, prompt):
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -58,8 +58,8 @@ def safe_generate(model_instance, prompt):
             return response.text
         except Exception as e:
             if "429" in str(e) or "quota" in str(e).lower():
-                wait = 35 * (attempt + 1)
-                st.warning(f"⚠️ Google Limit hit. Waiting {wait} seconds...")
+                wait = 30 * (attempt + 1)
+                st.warning(f"⚠️ Limit hit. Cooling down for {wait}s...")
                 time.sleep(wait)
             else:
                 return f"ERROR: {str(e)}"
@@ -75,7 +75,7 @@ def main_app():
 
     with st.sidebar:
         st.header("🔑 API Credentials")
-        user_api_key = st.text_input("Paste Your Google API Key", type="password")
+        user_key = st.text_input("Paste Your Google API Key", type="password")
         
         st.header("📏 Article Length")
         word_count_option = st.selectbox("Select Word Count:", ["1000 Words", "1500 Words", "2000 Words"])
@@ -90,53 +90,51 @@ def main_app():
         image_prompt_input = st.text_area("Describe Image", "Professional product photography")
 
     if st.button("🚀 Generate SEO Article Now"):
-        if not user_api_key or not keyword:
-            st.error("Please ensure API Key and Product Name are filled!")
+        if not user_key or not keyword:
+            st.error("Please provide your API Key and Product Name.")
         else:
-            # 1. IMAGE GENERATION
+            # 1. Image Generation
             st.subheader("🖼️ Product Visual")
             clean_img = urllib.parse.quote(image_prompt_input)
             img_url = f"https://image.pollinations.ai/prompt/{clean_img}?width=1024&height=768&nologo=true&seed={random.randint(1,9999)}"
             st.image(img_url, use_container_width=True)
 
-            # 2. AUTO-DETECT MODEL
-            model_name = find_working_model(user_api_key)
-            st.info(f"System: Connected via {model_name}")
+            # 2. Find Correct Model (FIXES 404)
+            verified_name = get_verified_model_name(user_key)
+            st.info(f"System: Connected to {verified_name}")
 
-            # 3. CONTENT GENERATION
+            # 3. Content Generation
             full_content = ""
-            status = st.status(f"Writing your {target_words} word expert review...")
-            
-            # Logic: 1000=2 phases, 1500=3 phases, 2000=4 phases
+            status = st.status(f"Writing your {target_words} word review...")
             steps = 2 if target_words == 1000 else (3 if target_words == 1500 else 4)
             words_per_step = target_words // steps
 
-            model_obj = genai.GenerativeModel(model_name)
+            model_obj = genai.GenerativeModel(model_name=verified_name)
 
             for i in range(steps):
-                status.write(f"Generating Part {i+1} of {steps}...")
+                status.write(f"Writing Phase {i+1} of {steps}...")
                 
-                # Critical 15-second sleep to prevent 429 Errors
+                # Sleep to stay under 429 Limit
                 if i > 0:
-                    status.write("⏱️ Cool-down period (15s) to stay under Google's limit...")
                     time.sleep(15)
 
                 prompt = f"""
                 Persona: Helpful Consumer Expert. Topic: {keyword} ({brand}).
-                Current Section: Phase {i+1} of {steps}. Length: {words_per_step} words.
+                Goal: Write a simple but knowledgeable Amazon affiliate review. 
+                Section: Phase {i+1} of {steps}. Length: {words_per_step} words.
 
-                RULES:
-                1. HEADING BEFORE EVERY PARAGRAPH: Every single paragraph must be preceded by a new H2 or H3 heading.
-                2. HEADINGS MUST USE "{keyword}" or related LSI terms.
-                3. LANGUAGE: Simple, matured, and attractive. Focus on main points.
-                4. NO HTML: Provide Meta Title and Description in plain text.
+                SEO & STYLE RULES:
+                1. EVERY single paragraph must start with a new H2 or H3 Heading.
+                2. HEADINGS must include "{keyword}" or related LSI terms.
+                3. LANGUAGE: Use simple, matured, and attractive English. Focus on main points.
+                4. PLAIN TEXT ONLY: Provide Meta Title and Meta Description in plain text. No HTML.
                 5. NO AI WORDS: Avoid delve, unlock, tapestry, unleash, in conclusion.
-                
-                Focus: {'Meta Data & Introduction' if i==0 else 'Main features & performance' if i<steps-1 else 'FAQ & Final Verdict'}
+
+                Phase {i+1} Focus: {'Meta Data & Attractive Introduction' if i==0 else 'Key features, usage, and benefits' if i<steps-1 else 'FAQ (6 questions) and Expert Verdict'}
                 Product Specs: {extra_info}
                 """
                 
-                chunk = safe_generate(model_obj, prompt)
+                chunk = safe_write(model_obj, prompt)
                 
                 if "ERROR" in chunk or "QUOTA_ERROR" in chunk:
                     st.error(chunk)
