@@ -34,11 +34,23 @@ def login_page():
     with col2:
         st.info("**Free Access Guide:** Use your own Google API Key to keep this tool free. [Get Key Here](https://aistudio.google.com/app/apikey)")
 
-# --- SMART GENERATOR WITH AUTO-RETRY ---
+# --- DYNAMIC MODEL PICKER (Fixes 404 Error) ---
+def get_working_model(api_key):
+    try:
+        genai.configure(api_key=api_key)
+        # We ask Google exactly what models this key can use
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                if 'gemini-1.5-flash' in m.name:
+                    return m.name # Returns the correct string like 'models/gemini-1.5-flash'
+        return "models/gemini-1.5-flash" # Fallback if list fails
+    except:
+        return "models/gemini-1.5-flash"
+
+# --- SMART GENERATOR ---
 def write_section_safe(key, model_name, prompt):
     genai.configure(api_key=key)
     model = genai.GenerativeModel(model_name)
-    
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -46,15 +58,12 @@ def write_section_safe(key, model_name, prompt):
             return response.text
         except Exception as e:
             if "429" in str(e) or "quota" in str(e).lower():
-                if attempt < max_retries - 1:
-                    wait_time = 30 * (attempt + 1) # Wait 30s, then 60s
-                    st.warning(f"⚠️ Google Limit Reached. Retrying automatically in {wait_time} seconds... (Attempt {attempt+1}/{max_retries})")
-                    time.sleep(wait_time)
-                else:
-                    return f"QUOTA_ERROR: Google's daily/minute limit is full. Please try a different API Key or wait 1 hour."
+                wait_time = 30 * (attempt + 1)
+                st.warning(f"⚠️ Limit reached. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
             else:
                 return f"ERROR: {str(e)}"
-    return "ERROR: Unknown failure"
+    return "QUOTA_ERROR"
 
 # --- MAIN APP ---
 def main_app():
@@ -67,23 +76,35 @@ def main_app():
     with st.sidebar:
         st.header("🔑 API Credentials")
         user_api_key = st.text_input("Paste Your Google API Key", type="password")
+        
+        st.header("📏 Article Length")
         word_count_option = st.selectbox("Select Word Count:", ["1000 Words", "1500 Words", "2000 Words"])
         target_words = int(word_count_option.split()[0])
+        
+        st.header("📦 Product Info")
         keyword = st.text_input("Product Name")
         brand = st.text_input("Brand Name")
         extra_info = st.text_area("Main Features")
+        
+        st.header("🖼️ Image Settings")
         image_prompt_input = st.text_area("Describe Image", "Professional product photography")
 
     if st.button("🚀 Generate SEO Article Now"):
         if not user_api_key:
             st.error("Please enter your API Key!")
+        elif not keyword:
+            st.error("Please enter a product name!")
         else:
-            # 1. Image
+            # 1. IMAGE
             clean_img = urllib.parse.quote(image_prompt_input)
             img_url = f"https://image.pollinations.ai/prompt/{clean_img}?width=1024&height=768&nologo=true&seed={random.randint(1,9999)}"
             st.image(img_url, use_container_width=True)
 
-            # 2. Content
+            # 2. FIND CORRECT MODEL
+            working_model = get_working_model(user_api_key)
+            st.info(f"Connected to: {working_model}")
+
+            # 3. CONTENT
             full_content = ""
             status = st.status(f"Writing your {target_words} word review...")
             steps = 2 if target_words == 1000 else (3 if target_words == 1500 else 4)
@@ -92,31 +113,31 @@ def main_app():
             for i in range(steps):
                 status.write(f"Writing Phase {i+1} of {steps}...")
                 
-                # Pre-request delay to be extra safe
-                if i > 0:
-                    time.sleep(5) 
+                # Small pause to keep Google happy
+                if i > 0: time.sleep(5) 
 
                 step_prompt = f"""
                 Persona: Helpful Consumer Expert. Product: {keyword} ({brand}). Length: {words_per_step} words.
-                Phase {i+1} focus: {'Meta/Intro' if i==0 else 'Features/Usage' if i<steps-1 else 'FAQ/Verdict'}
+                Phase {i+1} focus: {'Meta Data & Intro' if i==0 else 'Main features & usage' if i<steps-1 else 'FAQ & Verdict'}
                 
                 RULES: 
-                - New H2/H3 Heading before EVERY paragraph using "{keyword}" or LSI terms.
-                - Use SIMPLE language. NO HTML. No Meta tags.
-                - Avoid: delve, unlock, tapestry, unleash.
+                - New H2 or H3 Heading before EVERY single paragraph using "{keyword}" or related terms.
+                - Language: Simple and attractive. No technical jargon. 
+                - Plain text Meta Title and Description. NO HTML.
+                - Avoid AI words: delve, unlock, tapestry, unleash.
                 Data: {extra_info}
                 """
                 
-                section_text = write_section_safe(user_api_key, "gemini-1.5-flash", step_prompt)
+                section_text = write_section_safe(user_api_key, working_model, step_prompt)
                 
-                if "QUOTA_ERROR" in section_text:
+                if "ERROR" in section_text or "QUOTA_ERROR" in section_text:
                     st.error(section_text)
                     break
                 else:
                     full_content += section_text + "\n\n"
 
-            if "QUOTA_ERROR" not in full_content and full_content:
-                status.update(label="✅ Finished!", state="complete")
+            if full_content:
+                status.update(label="✅ Article Complete!", state="complete")
                 st.markdown("---")
                 st.markdown(full_content)
                 st.download_button("Download Review", full_content, file_name=f"{keyword}.txt")
